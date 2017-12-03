@@ -38,6 +38,7 @@ class File{
 		uint64_t items(){return this->d;}
 		uint64_t rows(){return this->n;}
 		T* get_dt(){ return this->data; }
+		void set_transpose(bool transpose){ this->transpose = transpose; }
 
 		//testing
 		void sample(){ this->sample(10); };
