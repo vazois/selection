@@ -122,7 +122,7 @@ unsigned int ArgParser::getUint(std::string arg){
 }
 
 float ArgParser::getFloat(std::string arg){
-	return atof(this->args[arg].c_str());
+	return std::stof(this->args[arg].c_str());
 }
 
 std::string ArgParser::getString(std::string arg){

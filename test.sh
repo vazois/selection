@@ -1,27 +1,24 @@
 #!/bin/bash
 
-START_N=$((1024 * 1024))
-END_N=$((1024 * 1024))
-START_D=8
-END_D=8
-
+N=$((1024 * 1024))
+D=8
 MAX_VALUE=100
-distr=i
+#AND=0#OR=1
+type=0
 
-for (( n=$START_N; n<=$END_N; n*=2 ))
-do
-	for (( d=$START_D; d<=$END_D; d+=2 ))
-	do
-		fname='d_'$n'_'$d'_'$MAX_VALUE
-		#echo "Processing ... "$fname
-		if [ ! -f data/$fname ]; then
-    		echo "Creating file <"$fname">"
-			cd data/; python selectivityGen.py $n $fname $MAX_VALUE $d ; cd ..
-		fi
-		
-		echo "Processing ... <"$fname">"
-		./gpu_run -f=data/$fname -mx=$MAX_VALUE
-		
-	done
-	
-done
+fname='d_'$N'_'$D'_'$MAX_VALUE
+if [ ! -f data/$fname ]; then
+ 	echo "Creating file <"$fname">"
+	cd data/; python selectivityGen.py $N $fname $MAX_VALUE $D ; cd ..
+fi
+
+args=args.out
+cd data/; python genQuerynums.py $MAX_VALUE 8 $type > ../args.out ; cd ..
+
+make gpu_cc
+while IFS='' read -r line || [[ -n "$line" ]]; do
+    #echo "Text read from file: $line"
+    #echo "$line"
+    ./gpu_run -f=data/$fname $line
+    #exit 1
+done < "args.out"

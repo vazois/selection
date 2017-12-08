@@ -83,7 +83,7 @@ void File<T>::line_specifier(){
 		this->frow+="%d";
 	}
 
-	std::cout << "fetch_row: " << this->frow << std::endl;
+	//std::cout << "fetch_row: " << this->frow << std::endl;
 	this->fetch_row=this->frow.c_str();
 
 	//uint64_t key,plaintext;
@@ -114,7 +114,7 @@ void File<T>::count(){
 
 	fclose(fp);
 	free(buffer);
-	std::cout << "dim: (" << (this->n) << "," << (this->d) << ")"<<std::endl;
+	//std::cout << "dim: (" << (this->n) << "," << (this->d) << ")"<<std::endl;
 }
 
 template<class T>
@@ -169,7 +169,7 @@ void File<T>::read_scanf(){
 
 template<class T>
 void File<T>::read_scanf_t(){
-	std::cout << "Read scanf transpose..." << std::endl;
+	//std::cout << "Read scanf transpose..." << std::endl;
 	FILE *f;
 	f = fopen(this->fname.c_str(), "r");
 	uint64_t i = 0;
@@ -214,13 +214,13 @@ void File<T>::load(T *& data){
 	this->line_specifier();
 
 	Time<msecs> t;
-	t.start();
+	//t.start();
 	if (!this->transpose){
 		this->read_scanf();
 	}else{
 		this->read_scanf_t();
 	}
-	t.lap("Read elapsed time (ms)!!!");
+	//t.lap("Read elapsed time (ms)!!!");
 }
 
 
