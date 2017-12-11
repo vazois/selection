@@ -1,10 +1,10 @@
 #!/bin/bash
 
-N=$((1024 * 1024))
+N=$((128*1024 * 1024))
 D=8
 MAX_VALUE=100
 #AND=0#OR=1
-type=0
+type=1
 
 fname='d_'$N'_'$D'_'$MAX_VALUE
 if [ ! -f data/$fname ]; then
@@ -19,6 +19,6 @@ make gpu_cc
 while IFS='' read -r line || [[ -n "$line" ]]; do
     #echo "Text read from file: $line"
     #echo "$line"
-    ./gpu_run -f=data/$fname $line
+    ./gpu_run -f=data/$fname -t=$type $line
     #exit 1
 done < "args.out"

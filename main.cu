@@ -31,13 +31,18 @@ void micro_bench(T *gdata, uint64_t *gres, uint64_t n, uint64_t d, uint64_t matc
 }
 
 template<class T>
-void micro_bench2(T *gdata, uint64_t *gres, uint64_t n, uint64_t d, uint64_t match_pred, uint64_t iter){
+void micro_bench2(T *gdata, uint64_t *gres, uint64_t n, uint64_t d, uint64_t match_pred, uint64_t iter, uint64_t and_){
 	//Start Processing
 	dim3 grid(n/BLOCK_SIZE,1,1);
 	dim3 block(BLOCK_SIZE,1,1);
 
-	for(uint64_t i=0; i < iter; i++) select_and<uint64_t,BLOCK_SIZE><<<grid,block>>>(gdata,gres, n, d, match_pred);
-	cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_generic_for");
+	if (and_ == 0){
+		for(uint64_t i=0; i < iter; i++) select_and_for_stop<uint64_t,BLOCK_SIZE><<<grid,block>>>(gdata,gres, n, d, match_pred);
+		cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_generic_for");
+	}else{
+		for(uint64_t i=0; i < iter; i++) select_or_for_stop<uint64_t,BLOCK_SIZE><<<grid,block>>>(gdata,gres, n, d, match_pred);
+		cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_generic_for");
+	}
 
 }
 
@@ -66,9 +71,15 @@ int main(int argc, char **argv){
 		exit(1);
 	}
 
+	if(!ap.exists("-t")){
+		std::cout << "Missing query type!!! (-t)" << std::endl;
+		exit(1);
+	}
+
 	uint64_t mx = ap.getInt("-mx");
 	float s = ap.getFloat("-s");
 	uint64_t d = ap.getInt("-d");
+	uint64_t and_ = ap.getInt("-t");
 
 	//Initialize load wrapper and pointers
 	File<uint64_t> f(ap.getString("-f"),true);
@@ -93,9 +104,10 @@ int main(int argc, char **argv){
 	uint64_t iter = 10;
 	Time<msecs> t;
 	t.start();
-	micro_bench2(gdata,gres, f.rows(), d, mx, iter );
+	micro_bench2(gdata,gres, f.rows(), d, mx, iter, and_);
 	//std::cout << "<" << mx << "," << s << "," << d << "> : " << t.lap() <<std::endl;
-	std::cout << "selectivity: " << s << ", pred: " << d << ", time(ms): " << t.lap()/iter <<std::endl;
+	//std::cout << "selectivity: " << s << " pred: " << d << " time(ms): " << t.lap()/iter <<std::endl;
+	std::cout << s << "," << d << "," << t.lap()/iter <<std::endl;
 
 	//micro_bench2(gdata,gres, n, d, match_pred);
 

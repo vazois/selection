@@ -28,4 +28,5 @@ for p in range(1, num_predicates+1):
             else:
                 probability = (1 - ((1- float(s) )** (1/float(p))))
                 comparewith = int(maxint - (maxint * probability))
-                print(p,s,comparewith)
+                #print(p,s,comparewith)
+                print "-d="+str(p),"-s="+str(s),"-mx="+str(comparewith)
