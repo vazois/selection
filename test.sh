@@ -1,10 +1,10 @@
 #!/bin/bash
 
-N=$((128*1024 * 1024))
+N=$((64 * 1024 * 1024))
 D=8
 MAX_VALUE=100
 #AND=0#OR=1
-type=1
+type=0
 
 fname='d_'$N'_'$D'_'$MAX_VALUE
 if [ ! -f data/$fname ]; then

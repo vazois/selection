@@ -1,3 +1,4 @@
+#include <cub/cub.cuh>
 #include "time/Time.h"
 #include "tools/ArgParser.h"
 #include "tools/File.h"
@@ -37,7 +38,8 @@ void micro_bench2(T *gdata, uint64_t *gres, uint64_t n, uint64_t d, uint64_t mat
 	dim3 block(BLOCK_SIZE,1,1);
 
 	if (and_ == 0){
-		for(uint64_t i=0; i < iter; i++) select_and_for_stop<uint64_t,BLOCK_SIZE><<<grid,block>>>(gdata,gres, n, d, match_pred);
+//		std::cout << "items:" << d << std::endl;
+		for(uint64_t i=0; i < iter; i++) select_and_for<uint64_t,BLOCK_SIZE><<<grid,block>>>(gdata,gres, n, d, match_pred);
 		cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_generic_for");
 	}else{
 		for(uint64_t i=0; i < iter; i++) select_or_for_stop<uint64_t,BLOCK_SIZE><<<grid,block>>>(gdata,gres, n, d, match_pred);
@@ -46,8 +48,136 @@ void micro_bench2(T *gdata, uint64_t *gres, uint64_t n, uint64_t d, uint64_t mat
 
 }
 
+template<class T>
+void micro_bench3(T *gdata, uint64_t *gres, uint64_t *gres_out, uint8_t *bvector, uint64_t *dnum,void *d_temp_storage,size_t temp_storage_bytes, uint64_t n, uint64_t d, uint64_t match_pred, uint64_t iter, uint64_t and_){
+	//Start Processing
+	dim3 grid(n/BLOCK_SIZE,1,1);
+	dim3 block(BLOCK_SIZE,1,1);
+
+	if (and_ == 0){
+		//for(uint64_t i=0; i < iter; i++) select_and_for_stop<uint64_t,BLOCK_SIZE><<<grid,block>>>(gdata,gres, n, d, match_pred);
+		for(uint64_t i=0; i < iter; i++){
+			select_and_for_gather<uint64_t,BLOCK_SIZE><<<grid,block>>>(gdata,bvector, n, d, match_pred);
+			cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_generic_for_gather 2");
+			cub::DevicePartition::Flagged(d_temp_storage,temp_storage_bytes,gres,bvector,gres_out,dnum, n);
+			cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_generic_for");
+		}
+	}else{
+		select_or_for_gather<uint64_t,BLOCK_SIZE><<<grid,block>>>(gdata,bvector, n, d, match_pred);
+		cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_generic_for");
+		cub::DevicePartition::Flagged(d_temp_storage,temp_storage_bytes,gres,bvector,gres_out,dnum, n);
+		cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_generic_for");
+	}
+}
+
+template<class T>
+void micro_bench4(T *gdata, uint64_t *gres, uint64_t *gres_out, uint8_t *bvector, uint64_t *dnum,void *d_temp_storage,size_t temp_storage_bytes, uint64_t n, uint64_t d, uint64_t match_pred, uint64_t iter, uint64_t and_){
+	//Start Processing
+	dim3 grid(n/BLOCK_SIZE,1,1);
+	dim3 block(BLOCK_SIZE,1,1);
+
+	for(uint64_t i=0; i < iter; i++){
+		select_and_for_tpch<uint64_t,BLOCK_SIZE><<<grid,block>>>(gdata,bvector, n);
+		cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_generic_for_gather 2");
+		cub::DevicePartition::Flagged(d_temp_storage,temp_storage_bytes,gres,bvector,gres_out,dnum, n);
+		cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_generic_for");
+	}
+}
 
 int main(int argc, char **argv){
+	ArgParser ap;
+	ap.parseArgs(argc,argv);
+
+	if(!ap.exists("-f")){
+		std::cout << "Missing file input!!! (-f)" << std::endl;
+		exit(1);
+	}
+
+	if(!ap.exists("-mx")){
+		std::cout << "Missing maximum value!!! (-mx)" << std::endl;
+		exit(1);
+	}
+
+	if(!ap.exists("-s")){
+		std::cout << "Missing selectivity!!! (-s)" << std::endl;
+		exit(1);
+	}
+
+	if(!ap.exists("-d")){
+		std::cout << "Missing predicate size!!! (-d)" << std::endl;
+		exit(1);
+	}
+
+	if(!ap.exists("-t")){
+		std::cout << "Missing query type!!! (-t)" << std::endl;
+		exit(1);
+	}
+
+	uint64_t mx = ap.getInt("-mx");
+	float s = ap.getFloat("-s");
+	uint64_t d = ap.getInt("-d");
+	uint64_t and_ = ap.getInt("-t");
+
+	//Initialize load wrapper and pointers
+	File<uint64_t> f(ap.getString("-f"),true);
+	uint64_t *data = NULL;
+	uint64_t *gdata = NULL;
+	uint8_t *bvector = NULL;
+	uint64_t *gres = NULL;
+	uint64_t *gres_out = NULL;
+	uint64_t *dnum = NULL;
+
+	void *d_temp_storage = NULL;
+	size_t temp_storage_bytes;
+
+	cutil::safeMallocHost<uint64_t,uint64_t>(&(data),sizeof(uint64_t)*f.items()*f.rows(),"data alloc");//data from file
+	cutil::safeMalloc<uint64_t,uint64_t>(&(gdata),sizeof(uint64_t)*f.items()*f.rows(),"gdata alloc");//data in GPU
+	cutil::safeMalloc<uint64_t,uint64_t>(&(gres),sizeof(uint64_t)*f.rows(),"gres alloc");//row ids
+	cutil::safeMalloc<uint8_t,uint64_t>(&(bvector),sizeof(uint8_t)*f.rows(),"bvector alloc");//boolean vector for evaluated rows
+	cutil::safeMalloc<uint64_t,uint64_t>(&(gres_out),sizeof(uint64_t)*f.rows(),"gres_out alloc");//qualifying rows
+	cutil::safeMalloc<uint64_t,uint64_t>(&(dnum),sizeof(uint64_t),"dnum alloc");//number of rows qualified
+
+	cub::DevicePartition::Flagged(d_temp_storage,temp_storage_bytes,gres,bvector,gres_out,dnum, f.rows());//call to allocate temp_storage
+	cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing ids partition");//synchronize
+	cutil::safeMalloc<void,uint64_t>(&(d_temp_storage),temp_storage_bytes,"tmp_storage alloc");//alloc temp storage
+
+	dim3 grid(f.rows()/BLOCK_SIZE,1,1);
+	dim3 block(BLOCK_SIZE,1,1);
+
+	init_ids<BLOCK_SIZE><<<grid,block>>>(gres,f.rows());
+	cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing init ids");//synchronize
+
+	//Load data
+	f.set_transpose(true);
+	f.load(data);
+	//f.sample();
+
+	//Transfer to GPU
+	cutil::safeCopyToDevice<uint64_t,uint64_t>(gdata,data,sizeof(uint64_t)*f.items()*f.rows(), " copy from data to gdata ");
+
+	uint64_t iter = 10;
+	Time<msecs> t;
+	t.start();
+	micro_bench3<uint64_t>(gdata,gres,gres_out,bvector,dnum,d_temp_storage,temp_storage_bytes,f.rows(),d,mx,iter,and_);
+	std::cout << s << "," << d << "," << t.lap()/iter <<std::endl;
+
+//	t.start();
+//	micro_bench2(gdata,gres, f.rows(), d, mx, iter, and_);
+//	std::cout << s << "," << d << "," << t.lap()/iter <<std::endl;
+
+	cudaFreeHost(data);
+	cudaFree(gdata);
+	cudaFree(gres);
+	cudaFree(bvector);
+	cudaFree(gres_out);
+	cudaFree(d_temp_storage);
+	cudaFree(dnum);
+
+	return 0;
+}
+
+
+int main2(int argc, char **argv){
 	ArgParser ap;
 	ap.parseArgs(argc,argv);
 

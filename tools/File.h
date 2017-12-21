@@ -85,12 +85,6 @@ void File<T>::line_specifier(){
 
 	//std::cout << "fetch_row: " << this->frow << std::endl;
 	this->fetch_row=this->frow.c_str();
-
-	//uint64_t key,plaintext;
-				//fscanf(infile,"%u" PRIx64 " %u" PRIx64,&key, &plaintext);
-//	if( std::is_same<T,float>::value ){
-//		std::cout<< "uint64_t" << std::endl;
-//	}
 }
 
 template<class T>

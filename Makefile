@@ -11,7 +11,7 @@ ARCH = -gencode arch=compute_61,code=sm_61
 all: gpu_cc
 
 gpu_cc:
-	$(NVCC) -std=c++11 $(ARCH) $(GC_MAIN) -o $(GC_EXE) -I cub-1.7.4/
+	$(NVCC) -std=c++11 $(ARCH) $(GC_MAIN) -o $(GC_EXE) -I ../TopK/cub-1.7.4/
 	
 clean:
 	rm -rf $(GC_EXE)  
