@@ -111,9 +111,6 @@ void init_relation(T *data, uint64_t n, uint64_t d){
 	for(uint64_t i = 0; i < n; i++){
 		for(uint64_t m = 0; m < d; m++){
 			data[m*n + i] = MIN_PRED + (rand() % static_cast<T>(MAX_PRED - MIN_PRED + 1));
-//			if(i < 2){
-//				std::cout << data[m*n + i] << std::endl;
-//			}
 		}
 	}
 }
@@ -123,6 +120,13 @@ void micro_bench5(uint64_t n, uint64_t d){
 	T *data = (T *)malloc(sizeof(T)*n*d);
 	T *gdata;
 	uint8_t *res,*hres;
+
+	T *d_in = NULL;
+	T *d_out = NULL;
+	T *d_num_selected_out = NULL;
+	void *d_temp_storage = NULL;
+	size_t temp_storage_bytes;
+
 	init_relation<uint32_t>(data,n,d);
 
 	hres = (uint8_t *)malloc(sizeof(uint8_t)*n);
@@ -130,11 +134,20 @@ void micro_bench5(uint64_t n, uint64_t d){
 	cutil::safeMalloc<uint8_t,uint64_t>(&(res),sizeof(uint8_t)*n*d,"gdata alloc");//data in GPU
 	cutil::safeCopyToDevice<T,uint64_t>(gdata,data,sizeof(T)*n*d, " copy from data to gdata ");
 
+	cutil::safeMalloc<uint32_t,uint64_t>(&(d_in),sizeof(uint32_t)*n,"d_in alloc");//
+	cutil::safeMalloc<uint32_t,uint64_t>(&(d_out),sizeof(uint32_t)*n,"d_out alloc");//
+	cutil::safeMalloc<uint32_t,uint64_t>(&(d_num_selected_out),sizeof(uint32_t),"d_num_selected_out alloc");
+	cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+	cudaMalloc(&d_temp_storage, temp_storage_bytes);
+	dim3 grid2(n/BLOCK_SIZE,1,1);
+	dim3 block2(BLOCK_SIZE,1,1);
+	init_ids2<T,BLOCK_SIZE><<<grid2,block2>>>(d_in,n);
+	cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing init ids");//synchronize
+
 	dim3 block(BLOCK_SIZE,1,1);
 	dim3 grid((n-1)/(BLOCK_SIZE*ITEMS_PER_THREAD),1,1);
 	Time<msecs> t;
 	double elapsedTime;
-
 	for(uint32_t p = 1; p <= d; p++){
 		std::cout << "predicates: " << p << std::endl;
 
@@ -147,7 +160,7 @@ void micro_bench5(uint64_t n, uint64_t d){
 			T *c1 = &gdata[n];
 			T *c2 = &gdata[2*n];
 			T *c3 = &gdata[3*n];
-		//	T *c4 = &gdata[4*n];
+			T *c4 = &gdata[4*n];
 		//	T *c5 = &gdata[5*n];
 		//	T *c6 = &gdata[6*n];
 		//	T *c7 = &gdata[7*n];
@@ -157,6 +170,8 @@ void micro_bench5(uint64_t n, uint64_t d){
 				t.start();
 				select_1_and<T,BLOCK_SIZE><<<grid,block>>>(&gdata[0],n,pred,res);
 				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_1");//synchronize
+				cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 				elapsedTime=t.lap();
 				std::cout << elapsedTime << std::endl;
 			}else if(p == 2){
@@ -165,6 +180,8 @@ void micro_bench5(uint64_t n, uint64_t d){
 					t.start();
 					select_2_and<T,BLOCK_SIZE><<<grid,block>>>(&gdata[0],&gdata[n],n,pred,res,pp);
 					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_2");//synchronize
+					cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 					elapsedTime=t.lap();
 					std::cout << elapsedTime << " ";
 				}
@@ -178,12 +195,16 @@ void micro_bench5(uint64_t n, uint64_t d){
 				t.start();
 				select_3_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,n,pred,res,0);
 				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+				cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 				elapsedTime=t.lap();
 				std::cout << elapsedTime << " ";
 
 				t.start();
 				select_3_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,n,pred,res,1);
 				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+				cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 				elapsedTime=t.lap();
 				std::cout << elapsedTime << " ";
 
@@ -191,18 +212,24 @@ void micro_bench5(uint64_t n, uint64_t d){
 					t.start();
 					select_3_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,n,pred,res,pp);
 					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+					cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 					elapsedTime=t.lap();
 					std::cout << elapsedTime << " ";
 
 					t.start();
 					select_3_and<T,BLOCK_SIZE><<<grid,block>>>(c1,c0,c2,n,pred,res,pp);
 					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+					cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 					elapsedTime=t.lap();
 					std::cout << elapsedTime << " ";
 
 					t.start();
 					select_3_and<T,BLOCK_SIZE><<<grid,block>>>(c2,c0,c1,n,pred,res,pp);
 					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+					cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 					elapsedTime=t.lap();
 					std::cout << elapsedTime << " ";
 				}
@@ -215,13 +242,17 @@ void micro_bench5(uint64_t n, uint64_t d){
 			}else if(p == 4){
 				t.start();
 				select_4_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,n,pred,res,0);
-				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_4");//synchronize
+				cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 				elapsedTime=t.lap();
 				std::cout << elapsedTime << " ";
 
 				t.start();
 				select_4_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,n,pred,res,1);
-				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_4");//synchronize
+				cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 				elapsedTime=t.lap();
 				std::cout << elapsedTime << " ";
 
@@ -243,12 +274,70 @@ void micro_bench5(uint64_t n, uint64_t d){
 
 						t.start();
 						select_4_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,n,pred,res,pp);
-						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_4");//synchronize
+						cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 						elapsedTime=t.lap();
 						minElapsedTime = std::min(elapsedTime,minElapsedTime);
 			    	}while(std::next_permutation(s.begin(), s.end()));
 					std::cout << minElapsedTime << " ";
 			    }
+				cutil::safeCopyToHost<uint8_t,uint64_t>(hres,res,sizeof(uint8_t)*n, " copy from res to hres ");
+				uint32_t count = 0;
+				for(uint32_t i = 0; i < n; i++) if(hres[i] == 1) count++;
+//				std::cout <<"s: " <<count << "," << ((double)count) / ((double)n) << " --- " << ((double)(10 - s))/10<< std::endl;
+				std::cout << (((double)count) / ((double)n))*100;
+				std::cout << std::endl;
+			}else if(p == 5){
+				t.start();
+				select_5_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,c4,n,pred,res,0);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_5");//synchronize
+				cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
+				elapsedTime=t.lap();
+				std::cout << elapsedTime << " ";
+
+				t.start();
+				select_5_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,c4,n,pred,res,1);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_5");//synchronize
+				cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
+				elapsedTime=t.lap();
+				std::cout << elapsedTime << " ";
+
+			    std::string s = "01234";
+			    for(uint32_t pp = 2; pp < 7;pp++){
+			    	double minElapsedTime = 1024*1024*1024;
+			    	do {
+			    		//std::cout << s << '\n';
+			    		int i0 = s[0] - '0';
+			    		int i1 = s[1] - '0';
+			    		int i2 = s[2] - '0';
+			    		int i3 = s[3] - '0';
+			    		int i4 = s[4] - '0';
+			    		//std::cout << i0 << "," << i1 << "," << i2 << ","<< i3 << std::endl;
+
+			    		c0 = &gdata[i0*n];
+			    		c1 = &gdata[i1*n];
+			    		c2 = &gdata[i2*n];
+			    		c3 = &gdata[i3*n];
+			    		c4 = &gdata[i4*n];
+
+						t.start();
+						select_5_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,c4,n,pred,res,pp);
+						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_5");//synchronize
+						cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
+						elapsedTime=t.lap();
+						minElapsedTime = std::min(elapsedTime,minElapsedTime);
+			    	}while(std::next_permutation(s.begin(), s.end()));
+					std::cout << minElapsedTime << " ";
+			    }
+				cutil::safeCopyToHost<uint8_t,uint64_t>(hres,res,sizeof(uint8_t)*n, " copy from res to hres ");
+				uint32_t count = 0;
+				for(uint32_t i = 0; i < n; i++) if(hres[i] == 1) count++;
+//				std::cout <<"s: " <<count << "," << ((double)count) / ((double)n) << " --- " << ((double)(10 - s))/10<< std::endl;
+				std::cout << (((double)count) / ((double)n))*100;
 				std::cout << std::endl;
 			}
 		}
@@ -258,6 +347,11 @@ void micro_bench5(uint64_t n, uint64_t d){
 	free(hres);
 	cudaFree(gdata);
 	cudaFree(res);
+
+	cudaFree(d_in);
+	cudaFree(d_out);
+	cudaFree(d_num_selected_out);
+	cudaFree(d_temp_storage);
 }
 
 int main(int argc, char **argv){
