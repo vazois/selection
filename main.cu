@@ -122,23 +122,36 @@ template<class T>
 void micro_bench5(uint64_t n, uint64_t d){
 	T *data = (T *)malloc(sizeof(T)*n*d);
 	T *gdata;
-	uint8_t *res;
+	uint8_t *res,*hres;
 	init_relation<uint32_t>(data,n,d);
 
+	hres = (uint8_t *)malloc(sizeof(uint8_t)*n);
 	cutil::safeMalloc<T,uint64_t>(&(gdata),sizeof(T)*n*d,"gdata alloc");//data in GPU
 	cutil::safeMalloc<uint8_t,uint64_t>(&(res),sizeof(uint8_t)*n*d,"gdata alloc");//data in GPU
 	cutil::safeCopyToDevice<T,uint64_t>(gdata,data,sizeof(T)*n*d, " copy from data to gdata ");
 
-	dim3 grid((n-1)/BLOCK_SIZE,1,1);
 	dim3 block(BLOCK_SIZE,1,1);
+	dim3 grid((n-1)/(BLOCK_SIZE*ITEMS_PER_THREAD),1,1);
 	Time<msecs> t;
 	double elapsedTime;
+
 	for(uint32_t p = 1; p <= d; p++){
 		std::cout << "predicates: " << p << std::endl;
+
 		for(int32_t s = 10; s >= 0; s--){
 			double prob = pow(((double)s)/10,(1.0/(double)p));
 			T pred = (T)((double)MAX_PRED -(((double)MAX_PRED)*prob));
 			//std::cout << p << "," << (((double)s)/10) << "," << pred << std::endl;
+
+			T *c0 = &gdata[0];
+			T *c1 = &gdata[n];
+			T *c2 = &gdata[2*n];
+			T *c3 = &gdata[3*n];
+		//	T *c4 = &gdata[4*n];
+		//	T *c5 = &gdata[5*n];
+		//	T *c6 = &gdata[6*n];
+		//	T *c7 = &gdata[7*n];
+			std::cout << std::fixed << std::setprecision(8);
 
 			if(p == 1){
 				t.start();
@@ -147,7 +160,7 @@ void micro_bench5(uint64_t n, uint64_t d){
 				elapsedTime=t.lap();
 				std::cout << elapsedTime << std::endl;
 			}else if(p == 2){
-				//std::cout <<"(" << (((double)s)/10) << "," << pred <<"):";
+				//std::cout <<"(" << (((double)s)/10)*100 << "," << pred <<"):";
 				for(uint32_t pp = 0; pp < 2;pp++){
 					t.start();
 					select_2_and<T,BLOCK_SIZE><<<grid,block>>>(&gdata[0],&gdata[n],n,pred,res,pp);
@@ -155,30 +168,94 @@ void micro_bench5(uint64_t n, uint64_t d){
 					elapsedTime=t.lap();
 					std::cout << elapsedTime << " ";
 				}
+				cutil::safeCopyToHost<uint8_t,uint64_t>(hres,res,sizeof(uint8_t)*n, " copy from res to hres ");
+				uint32_t count = 0;
+				for(uint32_t i = 0; i < n; i++) if(hres[i] == 1) count++;
+//				std::cout <<"s: " <<count << "," << ((double)count) / ((double)n) << " --- " << ((double)(10 - s))/10<< std::endl;
+				std::cout << ((double)count) / ((double)n);
 				std::cout << std::endl;
 			}else if(p == 3){
-				for(uint32_t pp = 0; pp < 4;pp++){
+				t.start();
+				select_3_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,n,pred,res,0);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+				elapsedTime=t.lap();
+				std::cout << elapsedTime << " ";
+
+				t.start();
+				select_3_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,n,pred,res,1);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+				elapsedTime=t.lap();
+				std::cout << elapsedTime << " ";
+
+				for(uint32_t pp = 2; pp < 3;pp++){
 					t.start();
-					select_3_and<T,BLOCK_SIZE><<<grid,block>>>(&gdata[0],&gdata[n],&gdata[2*n],n,pred,res,pp);
+					select_3_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,n,pred,res,pp);
+					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+					elapsedTime=t.lap();
+					std::cout << elapsedTime << " ";
+
+					t.start();
+					select_3_and<T,BLOCK_SIZE><<<grid,block>>>(c1,c0,c2,n,pred,res,pp);
+					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+					elapsedTime=t.lap();
+					std::cout << elapsedTime << " ";
+
+					t.start();
+					select_3_and<T,BLOCK_SIZE><<<grid,block>>>(c2,c0,c1,n,pred,res,pp);
 					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
 					elapsedTime=t.lap();
 					std::cout << elapsedTime << " ";
 				}
+				cutil::safeCopyToHost<uint8_t,uint64_t>(hres,res,sizeof(uint8_t)*n, " copy from res to hres ");
+				uint32_t count = 0;
+				for(uint32_t i = 0; i < n; i++) if(hres[i] == 1) count++;
+//				std::cout <<"s: " <<count << "," << ((double)count) / ((double)n) << " --- " << ((double)(10 - s))/10<< std::endl;
+				std::cout << (((double)count) / ((double)n))*100;
 				std::cout << std::endl;
 			}else if(p == 4){
-				for(uint32_t pp = 0; pp < 8;pp++){
-					t.start();
-					select_4_and<T,BLOCK_SIZE><<<grid,block>>>(&gdata[0],&gdata[n],&gdata[2*n],&gdata[3*n],n,pred,res,pp);
-					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
-					elapsedTime=t.lap();
-					std::cout << elapsedTime << " ";
-				}
+				t.start();
+				select_4_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,n,pred,res,0);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+				elapsedTime=t.lap();
+				std::cout << elapsedTime << " ";
+
+				t.start();
+				select_4_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,n,pred,res,1);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+				elapsedTime=t.lap();
+				std::cout << elapsedTime << " ";
+
+			    std::string s = "0123";
+			    for(uint32_t pp = 2; pp < 5;pp++){
+			    	double minElapsedTime = 1024*1024*1024;
+			    	do {
+			    		//std::cout << s << '\n';
+			    		int i0 = s[0] - '0';
+			    		int i1 = s[1] - '0';
+			    		int i2 = s[2] - '0';
+			    		int i3 = s[3] - '0';
+			    		//std::cout << i0 << "," << i1 << "," << i2 << ","<< i3 << std::endl;
+
+			    		c0 = &gdata[i0*n];
+			    		c1 = &gdata[i1*n];
+			    		c2 = &gdata[i2*n];
+			    		c3 = &gdata[i3*n];
+
+						t.start();
+						select_4_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,n,pred,res,pp);
+						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+						elapsedTime=t.lap();
+						minElapsedTime = std::min(elapsedTime,minElapsedTime);
+			    	}while(std::next_permutation(s.begin(), s.end()));
+					std::cout << minElapsedTime << " ";
+			    }
 				std::cout << std::endl;
 			}
 		}
 	}
 
 	free(data);
+	free(hres);
 	cudaFree(gdata);
 	cudaFree(res);
 }
