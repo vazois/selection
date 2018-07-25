@@ -8,8 +8,15 @@
 
 #include "selection/selection_test.h"
 #include "selection/selection.h"
+#include "selection/selection_plan.h"
+
+#include <cstdlib>
+#include <ctime>
+#include <cmath>
 
 #define BLOCK_SIZE 512
+#define MAX_PRED 100
+#define MIN_PRED 1
 
 template<class T>
 void micro_bench(T *gdata, uint64_t *gres, uint64_t n, uint64_t d, uint64_t match_pred){
@@ -98,7 +105,107 @@ int fetch(uint64_t &d,uint64_t &mx, float &s, FILE *f){
 	return r;
 }
 
+template<class T>
+void init_relation(T *data, uint64_t n, uint64_t d){
+	srand(time(NULL));
+	for(uint64_t i = 0; i < n; i++){
+		for(uint64_t m = 0; m < d; m++){
+			data[m*n + i] = MIN_PRED + (rand() % static_cast<T>(MAX_PRED - MIN_PRED + 1));
+//			if(i < 2){
+//				std::cout << data[m*n + i] << std::endl;
+//			}
+		}
+	}
+}
+
+template<class T>
+void micro_bench5(uint64_t n, uint64_t d){
+	T *data = (T *)malloc(sizeof(T)*n*d);
+	T *gdata;
+	uint8_t *res;
+	init_relation<uint32_t>(data,n,d);
+
+	cutil::safeMalloc<T,uint64_t>(&(gdata),sizeof(T)*n*d,"gdata alloc");//data in GPU
+	cutil::safeMalloc<uint8_t,uint64_t>(&(res),sizeof(uint8_t)*n*d,"gdata alloc");//data in GPU
+	cutil::safeCopyToDevice<T,uint64_t>(gdata,data,sizeof(T)*n*d, " copy from data to gdata ");
+
+	dim3 grid((n-1)/BLOCK_SIZE,1,1);
+	dim3 block(BLOCK_SIZE,1,1);
+	Time<msecs> t;
+	double elapsedTime;
+	for(uint32_t p = 1; p <= d; p++){
+		std::cout << "predicates: " << p << std::endl;
+		for(int32_t s = 10; s >= 0; s--){
+			double prob = pow(((double)s)/10,(1.0/(double)p));
+			T pred = (T)((double)MAX_PRED -(((double)MAX_PRED)*prob));
+			//std::cout << p << "," << (((double)s)/10) << "," << pred << std::endl;
+
+			if(p == 1){
+				t.start();
+				select_1_and<T,BLOCK_SIZE><<<grid,block>>>(&gdata[0],n,pred,res);
+				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_1");//synchronize
+				elapsedTime=t.lap();
+				std::cout << elapsedTime << std::endl;
+			}else if(p == 2){
+				//std::cout <<"(" << (((double)s)/10) << "," << pred <<"):";
+				for(uint32_t pp = 0; pp < 2;pp++){
+					t.start();
+					select_2_and<T,BLOCK_SIZE><<<grid,block>>>(&gdata[0],&gdata[n],n,pred,res,pp);
+					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_2");//synchronize
+					elapsedTime=t.lap();
+					std::cout << elapsedTime << " ";
+				}
+				std::cout << std::endl;
+			}else if(p == 3){
+				for(uint32_t pp = 0; pp < 4;pp++){
+					t.start();
+					select_3_and<T,BLOCK_SIZE><<<grid,block>>>(&gdata[0],&gdata[n],&gdata[2*n],n,pred,res,pp);
+					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+					elapsedTime=t.lap();
+					std::cout << elapsedTime << " ";
+				}
+				std::cout << std::endl;
+			}else if(p == 4){
+				for(uint32_t pp = 0; pp < 8;pp++){
+					t.start();
+					select_4_and<T,BLOCK_SIZE><<<grid,block>>>(&gdata[0],&gdata[n],&gdata[2*n],&gdata[3*n],n,pred,res,pp);
+					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_3");//synchronize
+					elapsedTime=t.lap();
+					std::cout << elapsedTime << " ";
+				}
+				std::cout << std::endl;
+			}
+		}
+	}
+
+	free(data);
+	cudaFree(gdata);
+	cudaFree(res);
+}
+
 int main(int argc, char **argv){
+	ArgParser ap;
+	ap.parseArgs(argc,argv);
+
+	if(!ap.exists("-n")){
+		std::cout << "Missing cardinality input!!! (-n)" << std::endl;
+		exit(1);
+	}
+
+	if(!ap.exists("-d")){
+		std::cout << "Missing dimensionality!!! (-d)" << std::endl;
+		exit(1);
+	}
+	uint64_t n = ap.getInt("-n");
+	uint64_t d = ap.getInt("-d");
+	std::cout << "N:" << n << "," << "D:" << d << std::endl;
+
+	cudaSetDevice(1);
+	micro_bench5<uint32_t>(n,d);
+
+}
+
+int main2(int argc, char **argv){
 	ArgParser ap;
 	ap.parseArgs(argc,argv);
 
@@ -186,7 +293,7 @@ int main(int argc, char **argv){
 	return 0;
 }
 
-int main2(int argc, char **argv){
+int main3(int argc, char **argv){
 	ArgParser ap;
 	ap.parseArgs(argc,argv);
 
@@ -258,7 +365,7 @@ int main2(int argc, char **argv){
 	return 0;
 }
 
-int main3(int argc, char **argv){
+int main4(int argc, char **argv){
 	ArgParser ap;
 	ap.parseArgs(argc,argv);
 

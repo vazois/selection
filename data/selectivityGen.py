@@ -23,8 +23,8 @@ with open(outputPath, 'wb') as output:
            output.write(str(random.randint(1, maxint)))
         output.write('\n')
         cnt = cnt + 1
-        if cnt % tenthRows == 0:
-            sys.stdout.write('\rProgress: %d%%' % (cnt * 100 / dataRows))
-            sys.stdout.flush()
-    sys.stdout.write('\n')
+#         if cnt % tenthRows == 0:
+#             sys.stdout.write('\rProgress: %d%%' % (cnt * 100 / dataRows))
+#             sys.stdout.flush()
+#     sys.stdout.write('\n')
     sys.stdout.flush()

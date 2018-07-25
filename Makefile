@@ -1,5 +1,7 @@
 CC=g++
-NVCC=/usr/local/cuda-8.0/bin/nvcc
+NVCC=/usr/local/cuda-9.0/bin/nvcc
+NVCC_INCLUDE=-I../TopK/cub-1.7.4/ -I/usr/local/cuda/include/
+NVCC_LIBS=-L/usr/local/cuda-9.0/lib64/
 
 #GPU CONFIGURATION
 GC_MAIN=main.cu
@@ -11,7 +13,7 @@ ARCH = -gencode arch=compute_61,code=sm_61
 all: gpu_cc
 
 gpu_cc:
-	$(NVCC) -std=c++11 $(ARCH) $(GC_MAIN) -o $(GC_EXE) -I ../TopK/cub-1.7.4/
+	$(NVCC) $(NVCC_LIBS) -std=c++11 $(ARCH) $(GC_MAIN) -o $(GC_EXE) $(NVCC_INCLUDE)
 	
 clean:
 	rm -rf $(GC_EXE)  
