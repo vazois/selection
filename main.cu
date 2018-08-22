@@ -17,7 +17,9 @@
 #define BLOCK_SIZE 512
 #define MAX_PRED 100
 #define MIN_PRED 1
-#define TEST_ALL_PLANS false
+#define TEST_ALL_PLANS true
+#define TEST_ONE_PERMUTATION false
+#define MIN_ATTRIBUTE 7
 
 template<class T>
 void micro_bench(T *gdata, uint64_t *gres, uint64_t n, uint64_t d, uint64_t match_pred){
@@ -149,10 +151,11 @@ void micro_bench5(uint64_t n, uint64_t d){
 	dim3 grid((n-1)/(BLOCK_SIZE*ITEMS_PER_THREAD),1,1);
 	Time<msecs> t;
 	double elapsedTime;
-	for(uint32_t p = 1; p <= d; p++){
+	for(uint32_t p = MIN_ATTRIBUTE; p <= d; p++){
 		std::cout << "predicates: " << p << std::endl;
 
-		for(int32_t s = 10; s >= 0; s--){
+		//for(int32_t s = 10; s >= 0; s--){
+		for(int32_t s = 0; s<=10; s++){
 			double prob = pow(((double)s)/10,(1.0/(double)p));
 			T pred = (T)((double)MAX_PRED -(((double)MAX_PRED)*prob));
 			//std::cout << p << "," << (((double)s)/10) << "," << pred << std::endl;
@@ -234,6 +237,7 @@ void micro_bench5(uint64_t n, uint64_t d){
 					cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 					elapsedTime=t.lap();
 					std::cout << elapsedTime << " ";
+					if(TEST_ONE_PERMUTATION) break;
 				}
 				}
 				cutil::safeCopyToHost<uint8_t,uint64_t>(hres,res,sizeof(uint8_t)*n, " copy from res to hres ");
@@ -282,6 +286,7 @@ void micro_bench5(uint64_t n, uint64_t d){
 						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 						elapsedTime=t.lap();
 						minElapsedTime = std::min(elapsedTime,minElapsedTime);
+						if(TEST_ONE_PERMUTATION) break;
 			    	}while(std::next_permutation(s.begin(), s.end()));
 					std::cout << minElapsedTime << " ";
 			    }
@@ -335,6 +340,7 @@ void micro_bench5(uint64_t n, uint64_t d){
 						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 						elapsedTime=t.lap();
 						minElapsedTime = std::min(elapsedTime,minElapsedTime);
+						if(TEST_ONE_PERMUTATION) break;
 			    	}while(std::next_permutation(s.begin(), s.end()));
 					std::cout << minElapsedTime << " ";
 			    }
@@ -361,6 +367,9 @@ void micro_bench5(uint64_t n, uint64_t d){
 				cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 				elapsedTime=t.lap();
 				std::cout << elapsedTime << " ";
+				cutil::safeCopyToHost<uint8_t,uint64_t>(hres,res,sizeof(uint8_t)*n, " copy from res to hres ");
+				uint32_t count = 0;
+				for(uint32_t i = 0; i < n; i++) if(hres[i] == 1) count++;
 
 				if(TEST_ALL_PLANS){
 			    std::string s = "012345";
@@ -382,7 +391,7 @@ void micro_bench5(uint64_t n, uint64_t d){
 			    		c2 = &gdata[i2*n];
 			    		c3 = &gdata[i3*n];
 			    		c4 = &gdata[i4*n];
-			    		c4 = &gdata[i5*n];
+			    		c5 = &gdata[i5*n];
 
 						t.start();
 						select_6_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,c4,c5,n,pred,res,pp);
@@ -391,13 +400,11 @@ void micro_bench5(uint64_t n, uint64_t d){
 						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
 						elapsedTime=t.lap();
 						minElapsedTime = std::min(elapsedTime,minElapsedTime);
+						if(TEST_ONE_PERMUTATION) break;
 			    	}while(std::next_permutation(s.begin(), s.end()));
 					std::cout << minElapsedTime << " ";
 			    }
 				}
-				cutil::safeCopyToHost<uint8_t,uint64_t>(hres,res,sizeof(uint8_t)*n, " copy from res to hres ");
-				uint32_t count = 0;
-				for(uint32_t i = 0; i < n; i++) if(hres[i] == 1) count++;
 //				std::cout <<"s: " <<count << "," << ((double)count) / ((double)n) << " --- " << ((double)(10 - s))/10<< std::endl;
 				std::cout << (((double)count) / ((double)n))*100;
 				std::cout << std::endl;
@@ -421,6 +428,44 @@ void micro_bench5(uint64_t n, uint64_t d){
 				cutil::safeCopyToHost<uint8_t,uint64_t>(hres,res,sizeof(uint8_t)*n, " copy from res to hres ");
 				uint32_t count = 0;
 				for(uint32_t i = 0; i < n; i++) if(hres[i] == 1) count++;
+				
+				if(TEST_ALL_PLANS){
+			    std::string s = "0123456";
+			    for(uint32_t pp = 2; pp < 14;pp++){
+			    	double minElapsedTime = 1024*1024*1024;
+			    	do {
+			    		//std::cout << s << '\n';
+			    		int i0 = s[0] - '0';
+			    		int i1 = s[1] - '0';
+			    		int i2 = s[2] - '0';
+			    		int i3 = s[3] - '0';
+			    		int i4 = s[4] - '0';
+			    		int i5 = s[5] - '0';
+			    		int i6 = s[6] - '0';						
+
+			    		//std::cout << i0 << "," << i1 << "," << i2 << ","<< i3 << std::endl;
+
+			    		c0 = &gdata[i0*n];
+			    		c1 = &gdata[i1*n];
+			    		c2 = &gdata[i2*n];
+			    		c3 = &gdata[i3*n];
+			    		c4 = &gdata[i4*n];
+			    		c5 = &gdata[i5*n];
+			    		c6 = &gdata[i6*n];						
+
+						t.start();
+						select_7_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,c4,c5,c6,n,pred,res,pp);
+						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_7");//synchronize
+						cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
+						elapsedTime=t.lap();
+						minElapsedTime = std::min(elapsedTime,minElapsedTime);
+						if(TEST_ONE_PERMUTATION) break;
+			    	}while(std::next_permutation(s.begin(), s.end()));
+					std::cout << minElapsedTime << " ";
+			    }
+				}
+				
 //				std::cout <<"s: " <<count << "," << ((double)count) / ((double)n) << " --- " << ((double)(10 - s))/10<< std::endl;
 				std::cout << (((double)count) / ((double)n))*100;
 				std::cout << std::endl;
@@ -444,6 +489,46 @@ void micro_bench5(uint64_t n, uint64_t d){
 				cutil::safeCopyToHost<uint8_t,uint64_t>(hres,res,sizeof(uint8_t)*n, " copy from res to hres ");
 				uint32_t count = 0;
 				for(uint32_t i = 0; i < n; i++) if(hres[i] == 1) count++;
+
+				if(TEST_ALL_PLANS){
+			    std::string s = "01234567";
+			    for(uint32_t pp = 2; pp < 16;pp++){
+			    	double minElapsedTime = 1024*1024*1024;
+			    	do {
+			    		//std::cout << s << '\n';
+			    		int i0 = s[0] - '0';
+			    		int i1 = s[1] - '0';
+			    		int i2 = s[2] - '0';
+			    		int i3 = s[3] - '0';
+			    		int i4 = s[4] - '0';
+			    		int i5 = s[5] - '0';
+			    		int i6 = s[6] - '0';
+						int i7 = s[7] - '0';
+
+			    		//std::cout << i0 << "," << i1 << "," << i2 << ","<< i3 << std::endl;
+
+			    		c0 = &gdata[i0*n];
+			    		c1 = &gdata[i1*n];
+			    		c2 = &gdata[i2*n];
+			    		c3 = &gdata[i3*n];
+			    		c4 = &gdata[i4*n];
+			    		c5 = &gdata[i5*n];
+			    		c6 = &gdata[i6*n];
+			    		c7 = &gdata[i7*n];						
+
+						t.start();
+						select_8_and<T,BLOCK_SIZE><<<grid,block>>>(c0,c1,c2,c3,c4,c5,c6,c7,n,pred,res,pp);
+						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing select_8");//synchronize
+						cub::DeviceSelect::Flagged(d_temp_storage, temp_storage_bytes, d_in, res, d_out, d_num_selected_out, n);
+						cutil::cudaCheckErr(cudaDeviceSynchronize(),"Error executing DeviceSelect");//synchronize
+						elapsedTime=t.lap();
+						minElapsedTime = std::min(elapsedTime,minElapsedTime);
+						if(TEST_ONE_PERMUTATION) break;
+			    	}while(std::next_permutation(s.begin(), s.end()));
+					std::cout << minElapsedTime << " ";
+			    }
+				}				
+				
 //				std::cout <<"s: " <<count << "," << ((double)count) / ((double)n) << " --- " << ((double)(10 - s))/10<< std::endl;
 				std::cout << (((double)count) / ((double)n))*100;
 				std::cout << std::endl;
@@ -479,7 +564,7 @@ int main(int argc, char **argv){
 	uint64_t d = ap.getInt("-d");
 	std::cout << "N:" << n << "," << "D:" << d << std::endl;
 
-	cudaSetDevice(1);
+	cudaSetDevice(0);
 	micro_bench5<uint32_t>(n,d);
 
 }
