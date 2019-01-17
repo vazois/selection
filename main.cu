@@ -19,7 +19,7 @@
 #define MIN_PRED 1
 #define TEST_ALL_PLANS true
 #define TEST_ONE_PERMUTATION false
-#define MIN_ATTRIBUTE 7
+#define MIN_ATTRIBUTE 1
 
 template<class T>
 void micro_bench(T *gdata, uint64_t *gres, uint64_t n, uint64_t d, uint64_t match_pred){
@@ -134,7 +134,7 @@ void micro_bench5(uint64_t n, uint64_t d){
 
 	hres = (uint8_t *)malloc(sizeof(uint8_t)*n);
 	cutil::safeMalloc<T,uint64_t>(&(gdata),sizeof(T)*n*d,"gdata alloc");//data in GPU
-	cutil::safeMalloc<uint8_t,uint64_t>(&(res),sizeof(uint8_t)*n*d,"gdata alloc");//data in GPU
+	cutil::safeMalloc<uint8_t,uint64_t>(&(res),sizeof(uint8_t)*n,"gdata alloc");//data in GPU
 	cutil::safeCopyToDevice<T,uint64_t>(gdata,data,sizeof(T)*n*d, " copy from data to gdata ");
 
 	cutil::safeMalloc<uint32_t,uint64_t>(&(d_in),sizeof(uint32_t)*n,"d_in alloc");//
@@ -151,7 +151,7 @@ void micro_bench5(uint64_t n, uint64_t d){
 	dim3 grid((n-1)/(BLOCK_SIZE*ITEMS_PER_THREAD),1,1);
 	Time<msecs> t;
 	double elapsedTime;
-	for(uint32_t p = MIN_ATTRIBUTE; p <= d; p++){
+	for(uint32_t p = MIN_ATTRIBUTE; p <= n; p++){
 		std::cout << "predicates: " << p << std::endl;
 
 		//for(int32_t s = 10; s >= 0; s--){
